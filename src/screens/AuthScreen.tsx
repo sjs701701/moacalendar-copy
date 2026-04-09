@@ -21,6 +21,8 @@ import { SvgXml } from "react-native-svg";
 
 import { AuthInput } from "../components/AuthInput";
 import { AuthMode, AuthModeSwitch } from "../components/AuthModeSwitch";
+import { ConfettiBurst } from "../components/ConfettiBurst";
+import { MainHomeScreen } from "../screens/MainHomeScreen";
 import { colors, radius, shadows, spacing } from "../theme";
 import { AuthErrors, validateLogin, validateSignUp } from "../utils/validation";
 
@@ -40,14 +42,17 @@ type AgreementKey = "calendarTerms" | "serviceTerms" | "privacyCollection" | "th
 
 type ScreenStage =
   | "landing"
+  | "mainHome"
   | "loginForm"
   | "signupPhone"
   | "signupName"
   | "signupTerms"
+  | "signupComplete"
   | "signupForm";
 
 const loginHero = require("../../assets/auth/login-hero.png");
 const appleIcon = require("../../assets/auth/apple-icon.png");
+const signupCompleteHero = require("../../assets/auth/signup-complete-hero.png");
 const allAgreeCheckOnXml = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <circle cx="12" cy="12" r="9.25" fill="#7550F5" stroke="#7550F5" stroke-width="1.5"/>
 <path d="M10.0917 15.9996C9.99206 16.004 9.89383 15.9741 9.81279 15.9148L7.14806 13.6684C6.97638 13.5134 6.95053 13.2496 7.08872 13.063C7.24045 12.8886 7.49694 12.8598 7.68219 12.9964L10.0561 14.9702L16.2876 9.09097C16.4719 8.94981 16.7313 8.9755 16.8856 9.15017C17.0398 9.32484 17.0379 9.59074 16.8811 9.76306L10.3944 15.8785C10.3118 15.9558 10.2039 15.999 10.0917 15.9996Z" fill="white" stroke="white" stroke-width="0.5"/>
@@ -191,8 +196,27 @@ export function AuthScreen() {
     setSubmitted("");
   };
 
+  const resetSignUpFlow = () => {
+    setSignUpForm(initialSignUp);
+    setPhoneNumber("");
+    setVerificationRequested(false);
+    setVerificationCode(["", "", "", "", "", ""]);
+    setAgreements({
+      calendarTerms: false,
+      serviceTerms: false,
+      privacyCollection: false,
+      thirdPartySharing: false,
+      marketing: false,
+    });
+    setErrors({});
+    setSubmitted("");
+  };
+
   const openForm = (nextMode: AuthMode) => {
     setMode(nextMode);
+    if (nextMode === "signup") {
+      resetSignUpFlow();
+    }
     setStage(nextMode === "login" ? "loginForm" : "signupPhone");
     setErrors({});
     setSubmitted("");
@@ -298,7 +322,7 @@ export function AuthScreen() {
 
     dismissSignupInputs();
     setMode("signup");
-    setStage("signupForm");
+    setStage("signupComplete");
   };
 
   const updateVerificationDigit = (index: number, value: string) => {
@@ -385,6 +409,10 @@ export function AuthScreen() {
     );
   }
 
+  if (stage === "mainHome") {
+    return <MainHomeScreen />;
+  }
+
   if (stage === "signupPhone") {
     return (
       <SafeAreaView edges={["top", "bottom", "left", "right"]} style={signupStyles.safeArea}>
@@ -424,8 +452,10 @@ export function AuthScreen() {
 
                 <View style={signupStyles.fieldGroup}>
                   <TextInput
+                    caretHidden
                     keyboardType="number-pad"
                     maxLength={11}
+                    selectTextOnFocus
                     onBlur={() => setPhoneFocused(false)}
                     onChangeText={(value) => setPhoneNumber(value.replace(/[^0-9]/g, ""))}
                     onFocus={() => {
@@ -433,12 +463,13 @@ export function AuthScreen() {
                       setPhoneFocused(true);
                       setFocusedVerificationIndex(null);
                     }}
-                    placeholder={
-                      phoneFocused && !phoneNumber ? "" : "휴대폰 번호 (-없이 숫자만 입력)"
-                    }
-                    placeholderTextColor="#A6ABB8"
+                    placeholder="휴대폰 번호 (-없이 숫자만 입력)"
+                    placeholderTextColor={phoneFocused ? "transparent" : "#A6ABB8"}
                     ref={phoneInputRef}
-                    style={signupStyles.phoneInput}
+                    style={[
+                      signupStyles.phoneInput,
+                      phoneFocused && signupStyles.inputFocused,
+                    ]}
                     textAlign="center"
                     value={phoneNumber}
                   />
@@ -458,7 +489,9 @@ export function AuthScreen() {
                       {verificationCode.map((digit, index) => (
                         <TextInput
                           key={`verification-${index}`}
+                          caretHidden
                           keyboardType="number-pad"
+                          selectTextOnFocus
                           maxLength={1}
                           onBlur={() =>
                             setFocusedVerificationIndex((current) =>
@@ -472,12 +505,15 @@ export function AuthScreen() {
                             setFocusedVerificationIndex(index);
                           }}
                           onKeyPress={(event) => clearVerificationDigit(index, event)}
-                          placeholder={focusedVerificationIndex === index && !digit ? "" : "0"}
-                          placeholderTextColor="#A6ABB8"
+                          placeholder="0"
+                          placeholderTextColor={focusedVerificationIndex === index ? "transparent" : "#A6ABB8"}
                           ref={(input) => {
                             verificationInputRefs.current[index] = input;
                           }}
-                          style={signupStyles.verificationInput}
+                          style={[
+                            signupStyles.verificationInput,
+                            focusedVerificationIndex === index && signupStyles.inputFocused,
+                          ]}
                           textAlign="center"
                           value={digit}
                         />
@@ -544,7 +580,9 @@ export function AuthScreen() {
                 <View style={signupStyles.fieldGroup}>
                   <TextInput
                     autoCapitalize="words"
+                    caretHidden
                     onBlur={() => setNameFocused(false)}
+                    selectTextOnFocus
                     onChangeText={(name) =>
                       setSignUpForm((current) => ({
                         ...current,
@@ -552,10 +590,13 @@ export function AuthScreen() {
                       }))
                     }
                     onFocus={() => setNameFocused(true)}
-                    placeholder={nameFocused && !signUpForm.name ? "" : "이름 입력"}
-                    placeholderTextColor="#A6ABB8"
+                    placeholder="이름 입력"
+                    placeholderTextColor={nameFocused ? "transparent" : "#A6ABB8"}
                     ref={nameInputRef}
-                    style={signupStyles.phoneInput}
+                    style={[
+                      signupStyles.phoneInput,
+                      nameFocused && signupStyles.inputFocused,
+                    ]}
                     textAlign="center"
                     value={signUpForm.name}
                   />
@@ -687,6 +728,51 @@ export function AuthScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  if (stage === "signupComplete") {
+    return (
+      <SafeAreaView edges={["top", "bottom", "left", "right"]} style={completionStyles.safeArea}>
+        <StatusBar style="dark" />
+        <View style={completionStyles.container}>
+          <ConfettiBurst />
+          <View style={completionStyles.headerSpacer} />
+
+          <View style={completionStyles.centerContent}>
+            <View style={completionStyles.illustrationWrap}>
+              <Image
+                resizeMode="contain"
+                source={signupCompleteHero}
+                style={completionStyles.illustrationImage}
+              />
+            </View>
+
+            <View style={completionStyles.copyBlock}>
+              <Text style={completionStyles.completeTitle}>가입 완료!</Text>
+              <Text style={completionStyles.completeDescription}>
+                앞으로 모아캘린더에서{"\n"}모든 일정을 관리해보세요!
+              </Text>
+            </View>
+          </View>
+
+          <Pressable
+            onPress={() => {
+              resetSignUpFlow();
+              setStage("mainHome");
+            }}
+          >
+            <LinearGradient
+              colors={["#6C4CF4", "#7C54F6"]}
+              end={{ x: 1, y: 0.5 }}
+              start={{ x: 0, y: 0.5 }}
+              style={completionStyles.nextButton}
+            >
+              <Text style={completionStyles.nextButtonText}>다음</Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
@@ -1088,6 +1174,10 @@ const signupStyles = StyleSheet.create({
     marginTop: 10,
     width: 300,
   },
+  inputFocused: {
+    borderColor: "#7550F5",
+    borderWidth: 2,
+  },
   verificationInput: {
     backgroundColor: "#FFFFFF",
     borderColor: "rgba(34,34,34,0.1)",
@@ -1098,6 +1188,72 @@ const signupStyles = StyleSheet.create({
     fontSize: 14,
     height: 60,
     paddingHorizontal: 0,
+  },
+  nextButton: {
+    alignItems: "center",
+    borderRadius: 10,
+    height: 60,
+    justifyContent: "center",
+    maxWidth: 340,
+    width: "100%",
+  },
+  nextButtonText: {
+    color: "#F6F7FB",
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: -0.32,
+  },
+});
+
+const completionStyles = StyleSheet.create({
+  safeArea: {
+    backgroundColor: "#F5F6FB",
+    flex: 1,
+  },
+  container: {
+    backgroundColor: "#F5F6FB",
+    flex: 1,
+    justifyContent: "space-between",
+    paddingBottom: 60,
+    paddingHorizontal: 45,
+  },
+  headerSpacer: {
+    height: 60,
+  },
+  centerContent: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
+  illustrationWrap: {
+    alignItems: "center",
+    height: 220,
+    justifyContent: "center",
+    marginBottom: 48,
+    overflow: "visible",
+    position: "relative",
+    width: 320,
+  },
+  illustrationImage: {
+    height: 190,
+    width: "100%",
+  },
+  copyBlock: {
+    alignItems: "center",
+    gap: 15,
+  },
+  completeTitle: {
+    color: "#7550F5",
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: -0.48,
+  },
+  completeDescription: {
+    color: "#A6ABB8",
+    fontSize: 18,
+    letterSpacing: -0.36,
+    lineHeight: 27,
+    textAlign: "center",
   },
   nextButton: {
     alignItems: "center",

@@ -46,12 +46,14 @@ export function AuthInput({
       >
         <TextInput
           autoCapitalize={autoCapitalize}
+          caretHidden
           keyboardType={keyboardType}
+          selectTextOnFocus
           onBlur={() => setFocused(false)}
           onChangeText={onChangeText}
           onFocus={() => setFocused(true)}
-          placeholder={focused && !value ? "" : placeholder}
-          placeholderTextColor={colors.inkSoft}
+          placeholder={placeholder}
+          placeholderTextColor={focused ? "transparent" : colors.inkSoft}
           secureTextEntry={secureTextEntry}
           style={styles.input}
           value={value}
@@ -91,11 +93,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   inputShellFocused: {
-    borderColor: colors.skyDeep,
-    shadowColor: colors.skyDeep,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
+    borderColor: "#7550F5",
+    borderWidth: 2,
   },
   inputShellError: {
     borderColor: colors.danger,
