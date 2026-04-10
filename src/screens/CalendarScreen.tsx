@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
-import Svg, { Line, Path, Rect } from "react-native-svg";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import Svg, { Line, Path } from "react-native-svg";
 
 const DAY_NAMES = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+const DAY_NAMES_SHORT = ["일", "월", "화", "수", "목", "금", "토"];
 
 const CALENDAR_OPTIONS = [
   { id: "basic", label: "기본", color: "#FFC54A" },
@@ -14,6 +15,32 @@ const CALENDAR_OPTIONS = [
   { id: "study", label: "스터디", color: "#88C255" },
   { id: "baby", label: "육아", color: "#FF9030" },
 ];
+
+const SCHEDULE_MAX_LENGTH = 20;
+
+type WeekDayItem = {
+  day: number;
+  month: number;
+  year: number;
+  dayOfWeek: number;
+  key: string;
+};
+
+function generateDays(baseDate: Date, offset: number, count: number): WeekDayItem[] {
+  const items: WeekDayItem[] = [];
+  for (let i = offset; i < offset + count; i++) {
+    const d = new Date(baseDate);
+    d.setDate(baseDate.getDate() + i);
+    items.push({
+      day: d.getDate(),
+      month: d.getMonth(),
+      year: d.getFullYear(),
+      dayOfWeek: d.getDay(),
+      key: `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`,
+    });
+  }
+  return items;
+}
 
 type EventTag = {
   label: string;
@@ -59,6 +86,8 @@ export function CalendarScreen() {
   const [memoFocused, setMemoFocused] = useState(false);
   const [calendarDropdownOpen, setCalendarDropdownOpen] = useState(false);
   const [selectedCalendar, setSelectedCalendar] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState("");
+  const [viewMode, setViewMode] = useState<"month" | "week">("month");
 
   const horizontalPadding = 10;
   const gridGap = 4;
@@ -106,6 +135,67 @@ export function CalendarScreen() {
 
   const monthLabel = `${year}.${String(month + 1).padStart(2, "0")}`;
 
+  // Week view infinite scroll
+  const [weekItems, setWeekItems] = useState<WeekDayItem[]>([]);
+  const isLoadingRef = useRef(false);
+  const weekListRef = useRef<FlatList<WeekDayItem>>(null);
+
+  const weekInitialIndex = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (viewMode === "week") {
+      // Generate 5 weeks centered around today
+      const todayDate = new Date();
+      const dow = todayDate.getDay();
+      const sunday = new Date(todayDate);
+      sunday.setDate(todayDate.getDate() - dow);
+      const items = generateDays(sunday, -14, 35);
+      const todayKey = `${todayDate.getFullYear()}-${todayDate.getMonth()}-${todayDate.getDate()}`;
+      weekInitialIndex.current = items.findIndex(item => item.key === todayKey);
+      setWeekItems(items);
+    } else {
+      weekInitialIndex.current = null;
+    }
+  }, [viewMode]);
+
+  const loadNextWeek = useCallback(() => {
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
+    setWeekItems(prev => {
+      const last = prev[prev.length - 1];
+      const nextDate = new Date(last.year, last.month, last.day + 1);
+      return [...prev, ...generateDays(nextDate, 0, 7)];
+    });
+    isLoadingRef.current = false;
+  }, []);
+
+  const loadPrevWeek = useCallback(() => {
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
+    setWeekItems(prev => {
+      const first = prev[0];
+      const prevDate = new Date(first.year, first.month, first.day);
+      return [...generateDays(prevDate, -7, 7), ...prev];
+    });
+    isLoadingRef.current = false;
+  }, []);
+
+  const handleWeekScroll = useCallback((e: any) => {
+    const { contentOffset } = e.nativeEvent;
+    if (contentOffset.y < 100) {
+      loadPrevWeek();
+    }
+  }, [loadPrevWeek]);
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    const first = viewableItems[0]?.item as WeekDayItem | undefined;
+    if (first) {
+      setYear(first.year);
+      setMonth(first.month);
+    }
+  }).current;
+
   // Build calendar cells
   const cells: Array<{ day: number; isCurrentMonth: boolean; dayOfWeek: number }> = [];
   for (let i = 0; i < totalCells; i++) {
@@ -150,70 +240,132 @@ export function CalendarScreen() {
       </View>
 
       <View style={s.viewToggleRow}>
-        <Pressable>
-          <Svg height={24} viewBox="0 0 24 24" width={24}>
-            <Rect fill="none" height={7} rx={1.5} stroke="#222" strokeWidth={1.6} width={7} x={4} y={4} />
-            <Rect fill="none" height={7} rx={1.5} stroke="#222" strokeWidth={1.6} width={7} x={13} y={4} />
-            <Rect fill="none" height={7} rx={1.5} stroke="#222" strokeWidth={1.6} width={7} x={4} y={13} />
-            <Rect fill="none" height={7} rx={1.5} stroke="#222" strokeWidth={1.6} width={7} x={13} y={13} />
-          </Svg>
+        <Pressable onPress={() => setViewMode("month")} style={[s.viewToggleTab, viewMode === "month" && s.viewToggleTabActive]}>
+          <Text style={[s.viewToggleText, viewMode === "month" && s.viewToggleTextActive]}>Month</Text>
         </Pressable>
-        <Pressable>
-          <Svg height={24} viewBox="0 0 24 24" width={24}>
-            <Line stroke="#A6ABB8" strokeLinecap="round" strokeWidth={1.8} x1={5} x2={19} y1={7} y2={7} />
-            <Line stroke="#A6ABB8" strokeLinecap="round" strokeWidth={1.8} x1={5} x2={19} y1={12} y2={12} />
-            <Line stroke="#A6ABB8" strokeLinecap="round" strokeWidth={1.8} x1={5} x2={19} y1={17} y2={17} />
-          </Svg>
+        <Pressable onPress={() => setViewMode("week")} style={[s.viewToggleTab, viewMode === "week" && s.viewToggleTabActive]}>
+          <Text style={[s.viewToggleText, viewMode === "week" && s.viewToggleTextActive]}>Week</Text>
         </Pressable>
       </View>
 
-      <ScrollView bounces={false} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={s.grid}>
-          {cells.map((cell, idx) => {
-            const isSelected = cell.isCurrentMonth && cell.day === selectedDay;
-            const dayColor = getDayColor(cell.dayOfWeek);
-            const events = cell.isCurrentMonth ? sampleEvents[cell.day] || [] : [];
+      {viewMode === "month" ? (
+        <ScrollView
+          bounces={false}
+          contentContainerStyle={[
+            s.scrollContent,
+            selectedDay > 0 && s.scrollContentWithBottomBar,
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={s.grid}>
+            {cells.map((cell, idx) => {
+              const isSelected = cell.isCurrentMonth && cell.day === selectedDay;
+              const dayColor = getDayColor(cell.dayOfWeek);
+              const events = cell.isCurrentMonth ? sampleEvents[cell.day] || [] : [];
+
+              return (
+                <Pressable
+                  key={idx}
+                  onPress={cell.isCurrentMonth ? () => setSelectedDay(cell.day) : undefined}
+                  style={[
+                    s.dayCell,
+                    { height: cellHeight, width: cellWidth },
+                    !cell.isCurrentMonth && s.dayCellOther,
+                    isSelected && { ...s.dayCellSelected, borderColor: dayColor },
+                  ]}
+                >
+                  <View style={s.dateArea}>
+                    {isSelected ? (
+                      <View style={[s.selectedCircle, { backgroundColor: dayColor }]}>
+                        <Text style={s.selectedCircleText}>{cell.day}</Text>
+                      </View>
+                    ) : (
+                      <Text style={[s.dateText, { color: dayColor }]}>{cell.day}</Text>
+                    )}
+                  </View>
+
+                  {events.map((evt, ei) => (
+                    <View key={ei} style={[s.eventTag, { backgroundColor: evt.bgColor }]}>
+                      {evt.isDDay ? (
+                        <Text style={s.dDayText}>
+                          <Text style={s.dDayPrefix}>D-</Text>
+                          {evt.dDayNumber}
+                        </Text>
+                      ) : (
+                        <Text numberOfLines={1} style={s.eventTagText}>
+                          {evt.label}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+      ) : (
+        <FlatList
+          ref={weekListRef}
+          contentContainerStyle={[
+            s.weekListContent,
+            selectedDay > 0 && s.scrollContentWithBottomBar,
+          ]}
+          data={weekItems}
+          getItemLayout={(_, index) => ({ length: 110, offset: 110 * index, index })}
+          initialScrollIndex={weekInitialIndex.current ?? undefined}
+          keyExtractor={(item) => item.key}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          onEndReached={loadNextWeek}
+          onEndReachedThreshold={0.5}
+          onScroll={handleWeekScroll}
+          renderItem={({ item: wd }) => {
+            const dayColor = getDayColor(wd.dayOfWeek);
+            const events = sampleEvents[wd.day] || [];
+            const isSelected = wd.month === month && wd.year === year && wd.day === selectedDay;
 
             return (
               <Pressable
-                key={idx}
-                onPress={cell.isCurrentMonth ? () => setSelectedDay(cell.day) : undefined}
-                style={[
-                  s.dayCell,
-                  { height: cellHeight, width: cellWidth },
-                  !cell.isCurrentMonth && s.dayCellOther,
-                  isSelected && { ...s.dayCellSelected, borderColor: dayColor },
-                ]}
+                onPress={() => {
+                  if (wd.month !== month || wd.year !== year) {
+                    setYear(wd.year);
+                    setMonth(wd.month);
+                  }
+                  setSelectedDay(wd.day);
+                }}
+                style={[s.weekDayCard, isSelected && { ...s.dayCellSelected, borderColor: dayColor }]}
               >
-                <View style={s.dateArea}>
-                  {isSelected ? (
-                    <View style={[s.selectedCircle, { backgroundColor: dayColor }]}>
-                      <Text style={s.selectedCircleText}>{cell.day}</Text>
-                    </View>
-                  ) : (
-                    <Text style={[s.dateText, { color: dayColor }]}>{cell.day}</Text>
-                  )}
+                <View style={s.weekDateRow}>
+                  <Text style={[s.weekDateNum, { color: dayColor }]}>{wd.day}.</Text>
+                  <Text style={s.weekDateDow}>{DAY_NAMES_SHORT[wd.dayOfWeek]}</Text>
                 </View>
-
                 {events.map((evt, ei) => (
-                  <View key={ei} style={[s.eventTag, { backgroundColor: evt.bgColor }]}>
-                    {evt.isDDay ? (
-                      <Text style={s.dDayText}>
-                        <Text style={s.dDayPrefix}>D-</Text>
-                        {evt.dDayNumber}
-                      </Text>
-                    ) : (
-                      <Text numberOfLines={1} style={s.eventTagText}>
-                        {evt.label}
-                      </Text>
-                    )}
+                  <View key={ei} style={[s.weekEventTag, { backgroundColor: evt.bgColor }]}>
+                    <View style={s.weekEventRow}>
+                      {evt.isDDay ? (
+                        <Text style={s.dDayText}>
+                          <Text style={s.dDayPrefix}>D-</Text>
+                          {evt.dDayNumber}
+                        </Text>
+                      ) : (
+                        <Text numberOfLines={1} style={s.eventTagText}>
+                          {evt.label}
+                        </Text>
+                      )}
+                    </View>
+                    {evt.memo ? (
+                      <Text numberOfLines={1} style={s.weekEventMemo}>{evt.memo}</Text>
+                    ) : null}
                   </View>
                 ))}
               </Pressable>
             );
-          })}
-        </View>
-      </ScrollView>
+          }}
+          scrollEventThrottle={200}
+          showsVerticalScrollIndicator={false}
+          viewabilityConfig={viewabilityConfig}
+          onViewableItemsChanged={onViewableItemsChanged}
+        />
+      )}
 
       {selectedDay > 0 && (
         <View style={s.bottomBar}>
@@ -226,11 +378,11 @@ export function CalendarScreen() {
         </View>
       )}
 
-      <Modal animationType="fade" onRequestClose={() => setAddModalOpen(false)} transparent visible={addModalOpen}>
-        <Pressable onPress={() => setAddModalOpen(false)} style={s.modalOverlay}>
+      <Modal animationType="fade" onRequestClose={() => { setAddModalOpen(false); setValidationError(""); }} transparent visible={addModalOpen}>
+        <Pressable onPress={() => { setAddModalOpen(false); setValidationError(""); }} style={s.modalOverlay}>
           <Pressable onPress={(e) => e.stopPropagation()} style={s.modalCard}>
             {/* Close button */}
-            <Pressable onPress={() => setAddModalOpen(false)} style={s.modalClose}>
+            <Pressable onPress={() => { setAddModalOpen(false); setValidationError(""); }} style={s.modalClose}>
               <Svg height={20} viewBox="0 0 20 20" width={20}>
                 <Line stroke="#A6ABB8" strokeLinecap="round" strokeWidth={1.6} x1={5} x2={15} y1={5} y2={15} />
                 <Line stroke="#A6ABB8" strokeLinecap="round" strokeWidth={1.6} x1={15} x2={5} y1={5} y2={15} />
@@ -288,6 +440,7 @@ export function CalendarScreen() {
                         onPress={() => {
                           setSelectedCalendar(opt.id);
                           setCalendarDropdownOpen(false);
+                          if (validationError) setValidationError("");
                         }}
                         style={[
                           s.dropdownItem,
@@ -305,10 +458,10 @@ export function CalendarScreen() {
               </View>
 
               {/* Schedule input */}
-              <View style={[s.modalInputBox, scheduleFocused && s.modalInputFocused]}>
+              <View style={[s.modalInputBox, scheduleFocused ? s.modalInputFocused : (validationError && s.validationErrorInputBorder)]}>
                 <TextInput
                   onBlur={() => setScheduleFocused(false)}
-                  onChangeText={setScheduleText}
+                  onChangeText={(text) => { setScheduleText(text); if (validationError) setValidationError(""); }}
                   onFocus={() => setScheduleFocused(true)}
                   placeholder="일정을 입력하세요."
                   placeholderTextColor={scheduleFocused ? "transparent" : "#A6ABB8"}
@@ -346,20 +499,35 @@ export function CalendarScreen() {
               </Pressable>
             </View>
 
+            {validationError ? (
+              <Text style={s.validationErrorText}>{validationError}</Text>
+            ) : null}
+
             {/* Submit button */}
-            <Pressable
-              onPress={() => {
-                setAddModalOpen(false);
-                setScheduleText("");
-                setMemoText("");
-                setIsDDay(false);
-                setSelectedCalendar(null);
-                setCalendarDropdownOpen(false);
-              }}
-              style={s.modalSubmitBtn}
-            >
-              <Text style={s.modalSubmitText}>일정등록</Text>
-            </Pressable>
+            {(() => {
+              const isDisabled = !selectedCalendar || !scheduleText.trim();
+              return (
+                <Pressable
+                  disabled={isDisabled}
+                  onPress={() => {
+                    if (scheduleText.trim().length > SCHEDULE_MAX_LENGTH) {
+                      setValidationError(`일정은 ${SCHEDULE_MAX_LENGTH}자 이내로 입력해주세요.`);
+                      return;
+                    }
+                    setAddModalOpen(false);
+                    setScheduleText("");
+                    setMemoText("");
+                    setIsDDay(false);
+                    setSelectedCalendar(null);
+                    setCalendarDropdownOpen(false);
+                    setValidationError("");
+                  }}
+                  style={[s.modalSubmitBtn, isDisabled && s.modalSubmitBtnDisabled]}
+                >
+                  <Text style={[s.modalSubmitText, isDisabled && s.modalSubmitTextDisabled]}>일정등록</Text>
+                </Pressable>
+              );
+            })()}
           </Pressable>
         </Pressable>
       </Modal>
@@ -446,13 +614,79 @@ const s = StyleSheet.create({
     letterSpacing: -0.44,
   },
   viewToggleRow: {
+    borderBottomColor: "#E8EBF5",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+  },
+  viewToggleTab: {
+    alignItems: "center",
+    flex: 1,
+    height: 40,
+    justifyContent: "center",
+  },
+  viewToggleTabActive: {
+    borderBottomColor: "#7550F5",
+    borderBottomWidth: 2,
+  },
+  viewToggleText: {
+    color: "#A6ABB8",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: -0.28,
+  },
+  viewToggleTextActive: {
+    color: "#7550F5",
+  },
+  weekListContent: {
+    gap: 10,
+    paddingBottom: 100,
+  },
+  weekDayCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 5,
+    gap: 6,
+    minHeight: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  weekDateRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
-    justifyContent: "flex-end",
+    gap: 5,
+    height: 20,
+    paddingHorizontal: 10,
+  },
+  weekDateNum: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  weekDateDow: {
+    color: "#000000",
+    fontSize: 12,
+    fontWeight: "400",
+  },
+  weekEventTag: {
+    borderRadius: 4,
+    gap: 2,
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  weekEventRow: {
+    alignItems: "center",
+    flexDirection: "row",
+  },
+  weekEventMemo: {
+    color: "#A6ABB8",
+    fontSize: 10,
+    fontWeight: "400",
+    letterSpacing: -0.2,
   },
   scrollContent: {
     paddingBottom: 100,
+  },
+  scrollContentWithBottomBar: {
+    paddingBottom: 190,
   },
   grid: {
     flexDirection: "row",
@@ -564,10 +798,10 @@ const s = StyleSheet.create({
   viewModalCard: {
     alignItems: "center",
     backgroundColor: "#F6F7FB",
-    borderRadius: 12,
-    gap: 20,
-    padding: 30,
-    width: 280,
+    borderRadius: 14,
+    gap: 22,
+    padding: 34,
+    width: 320,
   },
   viewEventList: {
     gap: 10,
@@ -578,9 +812,9 @@ const s = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 10,
     flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     width: "100%",
   },
   viewEventDot: {
@@ -593,15 +827,15 @@ const s = StyleSheet.create({
   },
   viewEventLabel: {
     color: "#222",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
-    letterSpacing: -0.26,
+    letterSpacing: -0.28,
   },
   viewEventMemo: {
     color: "#A6ABB8",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "400",
-    letterSpacing: -0.22,
+    letterSpacing: -0.24,
     marginTop: 3,
   },
   viewEmptyWrap: {
@@ -611,22 +845,22 @@ const s = StyleSheet.create({
   },
   viewEmptyText: {
     color: "#A6ABB8",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "500",
   },
   viewAddBtn: {
     alignItems: "center",
     backgroundColor: "#222",
     borderRadius: 1000,
-    height: 40,
+    height: 44,
     justifyContent: "center",
-    width: 220,
+    width: 252,
   },
   viewAddBtnText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    letterSpacing: -0.24,
+    letterSpacing: -0.26,
   },
   modalOverlay: {
     alignItems: "center",
@@ -637,10 +871,10 @@ const s = StyleSheet.create({
   modalCard: {
     alignItems: "center",
     backgroundColor: "#F6F7FB",
-    borderRadius: 12,
-    gap: 20,
-    padding: 30,
-    width: 280,
+    borderRadius: 14,
+    gap: 22,
+    padding: 34,
+    width: 320,
   },
   modalClose: {
     position: "absolute",
@@ -654,24 +888,24 @@ const s = StyleSheet.create({
   },
   modalDateText: {
     color: "#222",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "800",
-    letterSpacing: -0.32,
+    letterSpacing: -0.36,
   },
   modalDayOfWeek: {
     color: "#A6ABB8",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "400",
-    letterSpacing: -0.24,
+    letterSpacing: -0.26,
   },
   modalDivider: {
     backgroundColor: "rgba(34,34,34,0.1)",
     height: 1,
-    width: 220,
+    width: 252,
   },
   modalForm: {
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     width: "100%",
   },
   modalCalendarSelector: {
@@ -679,7 +913,7 @@ const s = StyleSheet.create({
     borderBottomColor: "#222",
     borderBottomWidth: 1,
     flexDirection: "row",
-    height: 40,
+    height: 44,
     justifyContent: "space-between",
     paddingHorizontal: 5,
     width: "100%",
@@ -687,9 +921,9 @@ const s = StyleSheet.create({
   modalCalendarSelectorText: {
     color: "#222",
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "400",
-    letterSpacing: -0.28,
+    letterSpacing: -0.3,
   },
   calendarDot: {
     borderRadius: 100,
@@ -739,9 +973,9 @@ const s = StyleSheet.create({
     borderColor: "rgba(34,34,34,0.1)",
     borderRadius: 10,
     borderWidth: 1,
-    height: 50,
+    height: 54,
     justifyContent: "center",
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     width: "100%",
   },
   modalInputFocused: {
@@ -750,30 +984,30 @@ const s = StyleSheet.create({
   },
   modalInput: {
     color: "#222",
-    fontSize: 14,
-    letterSpacing: -0.28,
+    fontSize: 15,
+    letterSpacing: -0.3,
     textAlign: "center",
   },
   modalMemoBox: {
     backgroundColor: "#FFFFFF",
     borderRadius: 10,
     gap: 8,
-    height: 100,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    height: 110,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     width: "100%",
   },
   modalMemoLabel: {
     color: "#222",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
-    letterSpacing: -0.24,
+    letterSpacing: -0.26,
   },
   modalMemoInput: {
     color: "#222",
     flex: 1,
-    fontSize: 12,
-    letterSpacing: -0.24,
+    fontSize: 13,
+    letterSpacing: -0.26,
     padding: 0,
   },
   modalCheckRow: {
@@ -786,9 +1020,9 @@ const s = StyleSheet.create({
     borderColor: "#A6ABB8",
     borderRadius: 3,
     borderWidth: 1.5,
-    height: 14,
+    height: 16,
     justifyContent: "center",
-    width: 14,
+    width: 16,
   },
   modalCheckboxChecked: {
     backgroundColor: "#222",
@@ -796,22 +1030,38 @@ const s = StyleSheet.create({
   },
   modalCheckLabel: {
     color: "#222",
+    fontSize: 13,
+    fontWeight: "500",
+    letterSpacing: -0.26,
+  },
+  validationErrorText: {
+    color: "#FE655D",
     fontSize: 12,
     fontWeight: "500",
     letterSpacing: -0.24,
+  },
+  validationErrorInputBorder: {
+    borderColor: "#FE655D",
+    borderWidth: 2,
   },
   modalSubmitBtn: {
     alignItems: "center",
     backgroundColor: "#222",
     borderRadius: 1000,
-    height: 40,
+    height: 44,
     justifyContent: "center",
-    width: 220,
+    width: 252,
+  },
+  modalSubmitBtnDisabled: {
+    backgroundColor: "#D9DBE1",
   },
   modalSubmitText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    letterSpacing: -0.24,
+    letterSpacing: -0.26,
+  },
+  modalSubmitTextDisabled: {
+    color: "#A6ABB8",
   },
 });

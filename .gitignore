@@ -39,3 +39,14 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local tooling
+.claude/
+.codex/
+
+# local inspection artifacts
+tmp-*
+verify_*
+manual_*
+recheck_*
+final_signup_*

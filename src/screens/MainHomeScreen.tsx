@@ -3,6 +3,7 @@ import { Animated, Easing, Image, Modal, Pressable, ScrollView, StyleSheet, Text
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
 import { CalendarScreen } from "./CalendarScreen";
+import { ListScreen } from "./ListScreen";
 
 type CalendarCard = {
   id: string;
@@ -579,6 +580,10 @@ export function MainHomeScreen() {
         ) : activeTab === "calendar" ? (
           <View style={{ flex: 1, marginHorizontal: -25 }}>
             <CalendarScreen />
+          </View>
+        ) : activeTab === "list" ? (
+          <View style={{ flex: 1, marginHorizontal: -25 }}>
+            <ListScreen />
           </View>
         ) : null}
 
