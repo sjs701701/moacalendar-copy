@@ -1,6 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -164,11 +164,37 @@ export function AuthScreen() {
     marketing: false,
   });
   const [focusedVerificationIndex, setFocusedVerificationIndex] = useState<number | null>(null);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [errors, setErrors] = useState<AuthErrors>({});
   const [submitted, setSubmitted] = useState("");
   const phoneInputRef = useRef<TextInput | null>(null);
   const nameInputRef = useRef<TextInput | null>(null);
   const verificationInputRefs = useRef<Array<TextInput | null>>([]);
+
+  const startTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimerSeconds(180);
+    timerRef.current = setInterval(() => {
+      setTimerSeconds((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          timerRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const timerRunning = timerSeconds > 0;
+  const timerText = `${Math.floor(timerSeconds / 60)}:${String(timerSeconds % 60).padStart(2, "0")}`;
 
   const headerCopy =
     mode === "login"
@@ -475,13 +501,29 @@ export function AuthScreen() {
                   />
 
                   <Pressable
+                    disabled={phoneNumber.length !== 11 || timerRunning}
                     onPress={() => {
                       dismissSignupInputs();
                       setVerificationRequested(true);
+                      startTimer();
                     }}
-                    style={signupStyles.outlineButton}
+                    style={[
+                      signupStyles.outlineButton,
+                      (phoneNumber.length !== 11 || timerRunning) && signupStyles.outlineButtonDisabled,
+                    ]}
                   >
-                    <Text style={signupStyles.outlineButtonText}>인증문자 받기</Text>
+                    <Text
+                      style={[
+                        signupStyles.outlineButtonText,
+                        (phoneNumber.length !== 11 || timerRunning) && signupStyles.outlineButtonTextDisabled,
+                      ]}
+                    >
+                      {timerRunning
+                        ? timerText
+                        : verificationRequested
+                          ? "인증문자 다시 받기"
+                          : "인증문자 받기"}
+                    </Text>
                   </Pressable>
 
                   {verificationRequested ? (
@@ -1161,11 +1203,17 @@ const signupStyles = StyleSheet.create({
     maxWidth: 340,
     width: "100%",
   },
+  outlineButtonDisabled: {
+    borderColor: "#D1D5DB",
+  },
   outlineButtonText: {
     color: "#7550F5",
     fontSize: 14,
     fontWeight: "500",
     letterSpacing: -0.28,
+  },
+  outlineButtonTextDisabled: {
+    color: "#D1D5DB",
   },
   verificationRow: {
     alignSelf: "center",

@@ -1,6 +1,12 @@
-import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import Svg, { Circle, Line, Path } from "react-native-svg";
+import { useRef, useState } from "react";
+import { Animated, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Svg, { Line, Path } from "react-native-svg";
+import { calendarCardIconAssets, CalendarIconType } from "./MainHomeScreen";
+
+const DELETE_BTN_WIDTH = 60;
+const DELETE_GAP = 10;
+const REVEAL_WIDTH = DELETE_BTN_WIDTH + DELETE_GAP;
+const SWIPE_THRESHOLD = -40;
 
 type CheckItem = {
   id: string;
@@ -12,31 +18,69 @@ type CheckItem = {
 type CheckSection = {
   id: string;
   title: string;
-  icon: "calendar" | "workout" | "done";
+  icon: CalendarIconType;
   iconColor: string;
   items: CheckItem[];
 };
 
 const INITIAL_SECTIONS: CheckSection[] = [
   {
-    id: "zephy",
+    id: "pet",
     title: "제피 캘린더",
-    icon: "calendar",
+    icon: "pet",
     iconColor: "#7550F5",
-    items: [
-      { id: "z1", text: "체크리스트 내용이 노출됩니다.", checked: false, color: "#7550F5" },
-      { id: "z2", text: "체크리스트 내용이 노출됩니다.", checked: false, color: "#7550F5" },
-    ],
+    items: [],
   },
   {
     id: "workout",
     title: "운동 캘린더",
-    icon: "workout",
+    icon: "health",
     iconColor: "#FE655D",
+    items: [],
+  },
+  {
+    id: "money",
+    title: "소비 캘린더",
+    icon: "wallet",
+    iconColor: "#50A5F5",
     items: [
-      { id: "w1", text: "체크리스트 내용이 노출됩니다.", checked: false, color: "#FE655D" },
-      { id: "w2", text: "체크리스트 내용이 노출됩니다.", checked: false, color: "#FE655D" },
+      { id: "m1", text: "체크리스트 내용이 노출됩니다.", checked: false, color: "#50A5F5" },
+      { id: "m2", text: "체크리스트 내용이 노출됩니다.", checked: false, color: "#50A5F5" },
     ],
+  },
+  {
+    id: "wedding",
+    title: "결혼 캘린더",
+    icon: "wedding",
+    iconColor: "#F059A7",
+    items: [
+      { id: "wd1", text: "체크리스트 내용이 노출됩니다.", checked: false, color: "#F059A7" },
+      { id: "wd2", text: "체크리스트 내용이 노출됩니다.", checked: false, color: "#F059A7" },
+    ],
+  },
+  {
+    id: "health",
+    title: "건강 캘린더",
+    icon: "medical",
+    iconColor: "#1FD2C3",
+    items: [
+      { id: "h1", text: "체크리스트 내용이 노출됩니다.", checked: false, color: "#1FD2C3" },
+      { id: "h2", text: "체크리스트 내용이 노출됩니다.", checked: false, color: "#1FD2C3" },
+    ],
+  },
+  {
+    id: "study",
+    title: "스터디 플래너",
+    icon: "study",
+    iconColor: "#88C255",
+    items: [],
+  },
+  {
+    id: "baby",
+    title: "육아일기",
+    icon: "baby",
+    iconColor: "#FF9030",
+    items: [],
   },
 ];
 
@@ -47,44 +91,6 @@ const INITIAL_DONE: CheckItem[] = [
   { id: "d4", text: "체크리스트 체크 시 색상이 표시됩니다.", checked: true, color: "#88C255" },
   { id: "d5", text: "체크리스트 체크 시 색상이 표시됩니다.", checked: true, color: "#88C255" },
 ];
-
-function SectionIcon({ type, color }: { type: "calendar" | "workout" | "done"; color: string }) {
-  if (type === "calendar") {
-    return (
-      <Svg height={20} viewBox="0 0 20 20" width={20}>
-        <Circle cx={10} cy={10} fill="none" r={8} stroke={color} strokeWidth={1.5} />
-        <Path d="M10 6v4l2.5 2.5" fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} />
-      </Svg>
-    );
-  }
-  if (type === "workout") {
-    return (
-      <Svg height={20} viewBox="0 0 20 20" width={20}>
-        <Path
-          d="M6.5 4.5v11M13.5 4.5v11M6.5 10h7M4 7v6M16 7v6"
-          fill="none"
-          stroke={color}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-        />
-      </Svg>
-    );
-  }
-  // done
-  return (
-    <Svg height={20} viewBox="0 0 20 20" width={20}>
-      <Path
-        d="M4 10.5l4 4 8-9"
-        fill="none"
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.8}
-      />
-    </Svg>
-  );
-}
 
 function CheckIcon({ checked, color }: { checked: boolean; color: string }) {
   return (
@@ -103,6 +109,21 @@ function CheckIcon({ checked, color }: { checked: boolean; color: string }) {
   );
 }
 
+function DoneIcon() {
+  return (
+    <Svg height={20} viewBox="0 0 20 20" width={20}>
+      <Path
+        d="M4 10.5l4 4 8-9"
+        fill="none"
+        stroke="#222"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.8}
+      />
+    </Svg>
+  );
+}
+
 function TrashIcon() {
   return (
     <Svg height={20} viewBox="0 0 20 20" width={20}>
@@ -114,41 +135,129 @@ function TrashIcon() {
   );
 }
 
+function SwipeableItem({
+  onPress,
+  onDelete,
+  children,
+}: {
+  onPress?: () => void;
+  onDelete: () => void;
+  children: React.ReactNode;
+}) {
+  const revealAnim = useRef(new Animated.Value(0)).current;
+  const isOpen = useRef(false);
+  const didSwipe = useRef(false);
+  const currentVal = useRef(0);
+  const listenerIdRef = useRef<string | null>(null);
+
+  if (!listenerIdRef.current) {
+    listenerIdRef.current = revealAnim.addListener(({ value }) => {
+      currentVal.current = value;
+    });
+  }
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderGrant: () => {
+        didSwipe.current = false;
+      },
+      onPanResponderMove: (_, g) => {
+        didSwipe.current = true;
+        const base = isOpen.current ? REVEAL_WIDTH : 0;
+        const raw = base - g.dx;
+        const clamped = Math.min(REVEAL_WIDTH, Math.max(0, raw));
+        revealAnim.setValue(clamped);
+      },
+      onPanResponderRelease: () => {
+        if (currentVal.current > -SWIPE_THRESHOLD) {
+          Animated.spring(revealAnim, { toValue: REVEAL_WIDTH, useNativeDriver: false }).start();
+          isOpen.current = true;
+        } else {
+          Animated.spring(revealAnim, { toValue: 0, useNativeDriver: false }).start();
+          isOpen.current = false;
+        }
+      },
+    }),
+  ).current;
+
+  const handlePress = () => {
+    if (didSwipe.current) return;
+    if (isOpen.current) {
+      Animated.spring(revealAnim, { toValue: 0, useNativeDriver: false }).start();
+      isOpen.current = false;
+      return;
+    }
+    onPress?.();
+  };
+
+  const deleteBtnOpacity = revealAnim.interpolate({
+    inputRange: [0, REVEAL_WIDTH],
+    outputRange: [0, 1],
+  });
+
+  return (
+    <View style={s.swipeRow}>
+      <Animated.View style={[s.actionLayer, { opacity: deleteBtnOpacity }]}>
+        <View style={s.deleteBtnWrap}>
+          <Pressable onPress={onDelete} style={s.deleteBtn}>
+            <TrashIcon />
+          </Pressable>
+        </View>
+      </Animated.View>
+      <Animated.View
+        style={{
+          flex: 1,
+          marginRight: revealAnim,
+        }}
+        {...panResponder.panHandlers}
+      >
+        <Pressable onPress={handlePress} style={s.itemCard}>
+          {children}
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
+}
+
 export function ListScreen() {
   const [sections, setSections] = useState(INITIAL_SECTIONS);
   const [doneItems, setDoneItems] = useState(INITIAL_DONE);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [swipedId, setSwipedId] = useState<string | null>(null);
-
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    INITIAL_SECTIONS.forEach((sec) => {
+      if (sec.items.length === 0) {
+        initial[sec.id] = true;
+      }
+    });
+    return initial;
+  });
   const toggleCollapse = (sectionId: string) => {
-    setCollapsed(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
+    setCollapsed((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
   };
 
   const toggleCheck = (sectionId: string, itemId: string) => {
-    setSections(prev =>
-      prev.map(sec => {
+    setSections((prev) =>
+      prev.map((sec) => {
         if (sec.id !== sectionId) return sec;
-        const item = sec.items.find(i => i.id === itemId);
+        const item = sec.items.find((i) => i.id === itemId);
         if (!item) return sec;
-        // Move to done
-        setDoneItems(d => [{ ...item, checked: true }, ...d]);
-        return { ...sec, items: sec.items.filter(i => i.id !== itemId) };
+        setDoneItems((d) => [{ ...item, checked: true }, ...d]);
+        return { ...sec, items: sec.items.filter((i) => i.id !== itemId) };
       }),
     );
   };
 
   const deleteItem = (sectionId: string, itemId: string) => {
-    setSections(prev =>
-      prev.map(sec =>
-        sec.id === sectionId ? { ...sec, items: sec.items.filter(i => i.id !== itemId) } : sec,
+    setSections((prev) =>
+      prev.map((sec) =>
+        sec.id === sectionId ? { ...sec, items: sec.items.filter((i) => i.id !== itemId) } : sec,
       ),
     );
-    setSwipedId(null);
   };
 
   const deleteDoneItem = (itemId: string) => {
-    setDoneItems(prev => prev.filter(i => i.id !== itemId));
-    setSwipedId(null);
+    setDoneItems((prev) => prev.filter((i) => i.id !== itemId));
   };
 
   return (
@@ -158,7 +267,13 @@ export function ListScreen() {
           {/* Section header */}
           <Pressable onPress={() => toggleCollapse(sec.id)} style={s.sectionHeader}>
             <View style={s.sectionTitleRow}>
-              <SectionIcon color={sec.iconColor} type={sec.icon} />
+              <View style={s.sectionIconWrap}>
+                <Image
+                  resizeMode="contain"
+                  source={calendarCardIconAssets[sec.icon]}
+                  style={[s.sectionIcon, { tintColor: sec.iconColor }]}
+                />
+              </View>
               <Text style={s.sectionTitle}>{sec.title}</Text>
             </View>
             <Svg
@@ -172,29 +287,22 @@ export function ListScreen() {
           </Pressable>
 
           {/* Items */}
-          {!collapsed[sec.id] && (
+          {!collapsed[sec.id] && sec.items.length > 0 && (
             <View style={s.itemList}>
-              {sec.items.map(item => (
-                <View key={item.id} style={s.itemRow}>
-                  <Pressable
-                    onLongPress={() => setSwipedId(swipedId === item.id ? null : item.id)}
-                    onPress={() => toggleCheck(sec.id, item.id)}
-                    style={[s.itemCard, swipedId === item.id && s.itemCardSwiped]}
-                  >
-                    <CheckIcon checked={item.checked} color={item.color} />
-                    <Text numberOfLines={1} style={s.itemText}>{item.text}</Text>
-                  </Pressable>
-                  {swipedId === item.id && (
-                    <Pressable onPress={() => deleteItem(sec.id, item.id)} style={s.deleteBtn}>
-                      <TrashIcon />
-                    </Pressable>
-                  )}
-                </View>
+              {sec.items.map((item) => (
+                <SwipeableItem
+                  key={item.id}
+                  onDelete={() => deleteItem(sec.id, item.id)}
+                  onPress={() => toggleCheck(sec.id, item.id)}
+                >
+                  <CheckIcon checked={item.checked} color={item.color} />
+                  <Text numberOfLines={1} style={s.itemText}>{item.text}</Text>
+                </SwipeableItem>
               ))}
             </View>
           )}
 
-          {/* Divider (except last before done) */}
+          {/* Divider */}
           {si < sections.length - 1 && <View style={s.divider} />}
         </View>
       ))}
@@ -206,7 +314,7 @@ export function ListScreen() {
       <View>
         <Pressable onPress={() => toggleCollapse("done")} style={s.sectionHeader}>
           <View style={s.sectionTitleRow}>
-            <SectionIcon color="#222" type="done" />
+            <DoneIcon />
             <Text style={s.sectionTitle}>완료된 체크리스트</Text>
           </View>
           <Svg
@@ -221,21 +329,11 @@ export function ListScreen() {
 
         {!collapsed["done"] && (
           <View style={s.itemList}>
-            {doneItems.map(item => (
-              <View key={item.id} style={s.itemRow}>
-                <Pressable
-                  onLongPress={() => setSwipedId(swipedId === item.id ? null : item.id)}
-                  style={[s.itemCard, swipedId === item.id && s.itemCardSwiped]}
-                >
-                  <CheckIcon checked color={item.color} />
-                  <Text numberOfLines={1} style={s.itemText}>{item.text}</Text>
-                </Pressable>
-                {swipedId === item.id && (
-                  <Pressable onPress={() => deleteDoneItem(item.id)} style={s.deleteBtn}>
-                    <TrashIcon />
-                  </Pressable>
-                )}
-              </View>
+            {doneItems.map((item) => (
+              <SwipeableItem key={item.id} onDelete={() => deleteDoneItem(item.id)}>
+                <CheckIcon checked color={item.color} />
+                <Text numberOfLines={1} style={s.itemText}>{item.text}</Text>
+              </SwipeableItem>
             ))}
           </View>
         )}
@@ -248,7 +346,7 @@ const s = StyleSheet.create({
   container: {
     gap: 30,
     paddingBottom: 100,
-    paddingHorizontal: 10,
+    paddingHorizontal: 25,
     paddingTop: 50,
   },
   sectionHeader: {
@@ -256,11 +354,22 @@ const s = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingRight: 4,
+    paddingVertical: 10,
   },
   sectionTitleRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: 10,
+  },
+  sectionIconWrap: {
+    alignItems: "center",
+    height: 20,
+    justifyContent: "center",
+    width: 20,
+  },
+  sectionIcon: {
+    height: 20,
+    width: 20,
   },
   sectionTitle: {
     color: "#222",
@@ -272,9 +381,18 @@ const s = StyleSheet.create({
     gap: 10,
     marginTop: 20,
   },
-  itemRow: {
-    flexDirection: "row",
-    gap: 10,
+  swipeRow: {
+    height: 60,
+    position: "relative",
+  },
+  actionLayer: {
+    alignItems: "flex-end",
+    bottom: 0,
+    justifyContent: "center",
+    position: "absolute",
+    right: 0,
+    top: 0,
+    width: REVEAL_WIDTH,
   },
   itemCard: {
     alignItems: "center",
@@ -284,11 +402,8 @@ const s = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     height: 60,
+    overflow: "hidden",
     paddingHorizontal: 14,
-  },
-  itemCardSwiped: {
-    flex: 0,
-    flexBasis: "82%",
   },
   itemText: {
     color: "#222",
@@ -306,13 +421,18 @@ const s = StyleSheet.create({
     justifyContent: "center",
     width: 24,
   },
+  deleteBtnWrap: {
+    justifyContent: "center",
+    width: REVEAL_WIDTH,
+  },
   deleteBtn: {
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.10)",
     borderRadius: 10,
     height: 60,
     justifyContent: "center",
-    width: 60,
+    marginLeft: DELETE_GAP,
+    width: DELETE_BTN_WIDTH,
   },
   divider: {
     backgroundColor: "rgba(0,0,0,0.06)",

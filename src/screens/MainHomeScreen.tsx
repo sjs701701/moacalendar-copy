@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
+import { BoardScreen } from "./BoardScreen";
+import { CalendarDetailScreen } from "./CalendarDetailScreen";
 import { CalendarScreen } from "./CalendarScreen";
 import { ListScreen } from "./ListScreen";
 
@@ -35,7 +37,9 @@ const calendarCardIconAssetPaths: Record<CalendarCard["icon"], string> = {
   baby: "assets/home/calendar-icons/baby-calendar-icon.png",
 };
 
-const calendarCardIconAssets: Record<CalendarCard["icon"], any> = {
+export type CalendarIconType = CalendarCard["icon"];
+
+export const calendarCardIconAssets: Record<CalendarCard["icon"], any> = {
   star: require("../../assets/home/calendar-icons/basic-calendar-icon.png"),
   wallet: require("../../assets/home/calendar-icons/expense-calendar-icon.png"),
   pet: require("../../assets/home/calendar-icons/pet-calendar-icon.png"),
@@ -332,6 +336,8 @@ export function MainHomeScreen() {
   const [activeTab, setActiveTab] = useState<"home" | "calendar" | "list" | "share" | "settings">("home");
   const [calendarName, setCalendarName] = useState("");
   const [selectedAddMenuItem, setSelectedAddMenuItem] = useState<AddMenuItem | null>(null);
+  const [boardWriteCategory, setBoardWriteCategory] = useState<AddMenuItem | null>(null);
+  const [openCalendarCard, setOpenCalendarCard] = useState<CalendarCard | null>(null);
   const addMenuAnimation = useRef(new Animated.Value(0)).current;
   const tabBarAnimation = useRef(new Animated.Value(0)).current;
   const lastScrollOffset = useRef(0);
@@ -399,6 +405,11 @@ export function MainHomeScreen() {
   };
 
   const handleSelectAddMenuItem = (item: AddMenuItem) => {
+    if (activeTab === "share") {
+      setBoardWriteCategory(item);
+      closeAddMenu();
+      return;
+    }
     setSelectedAddMenuItem(item);
     setCalendarName("");
     setIsCreateModalOpen(true);
@@ -455,6 +466,7 @@ export function MainHomeScreen() {
   };
 
   return (
+    <View style={styles.screenRoot}>
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
       <View style={styles.container}>
         {activeTab === "home" ? (
@@ -468,12 +480,32 @@ export function MainHomeScreen() {
         >
           <View style={styles.grid}>
             {cards.map((card) => (
-              <CalendarCardView key={card.id} card={card} width={cardWidth} />
+              <Pressable key={card.id} onPress={() => setOpenCalendarCard(card)}>
+                <CalendarCardView card={card} width={cardWidth} />
+              </Pressable>
             ))}
           </View>
         </Animated.ScrollView>
 
-        {isAddMenuMounted ? (
+          </>
+        ) : activeTab === "calendar" ? (
+          <View style={{ flex: 1, marginHorizontal: -25 }}>
+            <CalendarScreen />
+          </View>
+        ) : activeTab === "list" ? (
+          <View style={{ flex: 1, marginHorizontal: -25 }}>
+            <ListScreen />
+          </View>
+        ) : activeTab === "share" ? (
+          <View style={{ flex: 1, marginHorizontal: -25 }}>
+            <BoardScreen
+              writeCategory={boardWriteCategory}
+              onWriteCategoryClose={() => setBoardWriteCategory(null)}
+            />
+          </View>
+        ) : null}
+
+        {(activeTab === "home" || activeTab === "share") && isAddMenuMounted ? (
           <>
             <Pressable onPress={closeAddMenu} style={styles.addMenuOverlay} />
             <Animated.View
@@ -510,19 +542,21 @@ export function MainHomeScreen() {
           </>
         ) : null}
 
-        {!isAddMenuMounted ? (
+        {(activeTab === "home" || activeTab === "share") && !isAddMenuMounted ? (
           <Pressable
             onPress={toggleAddMenu}
             style={styles.fab}
           >
-            <Svg
-              height={24}
-              viewBox="0 0 24 24"
-              width={24}
-            >
-              <Line stroke="#7550F5" strokeLinecap="round" strokeWidth={2.3} x1={12} x2={12} y1={4} y2={20} />
-              <Line stroke="#7550F5" strokeLinecap="round" strokeWidth={2.3} x1={4} x2={20} y1={12} y2={12} />
-            </Svg>
+            {activeTab === "share" ? (
+              <Svg height={24} viewBox="0 0 24 24" width={24}>
+                <Path d="M15.5 5.5l3 3M5 19l1.5-5.5L17 3a1.41 1.41 0 012 0l1 1a1.41 1.41 0 010 2L9.5 16.5 5 19z" fill="none" stroke="#7550F5" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} />
+              </Svg>
+            ) : (
+              <Svg height={24} viewBox="0 0 24 24" width={24}>
+                <Line stroke="#7550F5" strokeLinecap="round" strokeWidth={2.3} x1={12} x2={12} y1={4} y2={20} />
+                <Line stroke="#7550F5" strokeLinecap="round" strokeWidth={2.3} x1={4} x2={20} y1={12} y2={12} />
+              </Svg>
+            )}
           </Pressable>
         ) : null}
 
@@ -568,7 +602,21 @@ export function MainHomeScreen() {
                     />
                   </View>
 
-                  <Pressable style={styles.createModalButton}>
+                  <Pressable
+                    onPress={() => {
+                      if (!selectedAddMenuItem) return;
+                      const newCard: CalendarCard = {
+                        id: selectedAddMenuItem.id + "_" + Date.now(),
+                        title: calendarName || selectedAddMenuItem.label,
+                        subtitle: selectedAddMenuItem.label + " 캘린더",
+                        color: selectedAddMenuItem.color,
+                        icon: selectedAddMenuItem.icon,
+                      };
+                      closeCreateModal();
+                      setOpenCalendarCard(newCard);
+                    }}
+                    style={styles.createModalButton}
+                  >
                     <Text style={styles.createModalButtonText}>캘린더 생성</Text>
                   </Pressable>
                 </>
@@ -576,16 +624,6 @@ export function MainHomeScreen() {
             </Pressable>
           </Pressable>
         </Modal>
-          </>
-        ) : activeTab === "calendar" ? (
-          <View style={{ flex: 1, marginHorizontal: -25 }}>
-            <CalendarScreen />
-          </View>
-        ) : activeTab === "list" ? (
-          <View style={{ flex: 1, marginHorizontal: -25 }}>
-            <ListScreen />
-          </View>
-        ) : null}
 
         <Animated.View style={[styles.tabBar, { width, transform: [{ translateY: tabBarTranslateY }] }]}>
           <Pressable onPress={() => switchTab("home")} style={styles.tabItem}>
@@ -606,10 +644,25 @@ export function MainHomeScreen() {
         </Animated.View>
       </View>
     </SafeAreaView>
+    {openCalendarCard && (
+      <View style={styles.calendarDetailOverlay}>
+        <CalendarDetailScreen
+          color={openCalendarCard.color}
+          icon={openCalendarCard.icon}
+          onClose={() => setOpenCalendarCard(null)}
+          subtitle={openCalendarCard.subtitle}
+          title={openCalendarCard.title}
+        />
+      </View>
+    )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenRoot: {
+    flex: 1,
+  },
   safeArea: {
     backgroundColor: "#F6F7FB",
     flex: 1,
@@ -844,4 +897,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tabIconImage: {},
+  calendarDetailOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+  },
 });
