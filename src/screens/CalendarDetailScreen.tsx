@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { useEffect, useState } from "react";
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { BarChart, LineChart } from "react-native-gifted-charts";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
 import { calendarCardIconAssets, CalendarIconType } from "./MainHomeScreen";
@@ -9,7 +10,8 @@ type CalendarDetailProps = {
   subtitle: string;
   color: string;
   icon: CalendarIconType;
-  onClose: () => void;
+  onClose?: () => void;
+  onRecordViewChange?: (active: boolean) => void;
 };
 
 /* ── helpers ── */
@@ -40,6 +42,66 @@ function PlusIcon({ color = "#A6ABB8" }: { color?: string }) {
   );
 }
 
+function BottomSelectionPanel({
+  color,
+  items,
+  onRemove,
+}: {
+  color: string;
+  items: { id: string; name: string }[];
+  onRemove: (item: { id: string; name: string }) => void;
+}) {
+  return (
+    <LinearGradient
+      colors={["rgba(150,160,202,0.2)", "rgba(255,255,255,0.2)"]}
+      style={ds.bottomPanel}
+    >
+      {items.length === 0 ? (
+        <View style={ds.bottomPanelEmpty}>
+          <Text style={ds.bottomPanelEmptyText}>운동종목을 추가해주세요.</Text>
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={ds.bottomPanelItems}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {items.map((item) => (
+            <View key={item.id} style={ds.bottomPanelItem}>
+              <View style={ds.bottomPanelThumb} />
+              <Text numberOfLines={1} style={ds.bottomPanelItemName}>{item.name}</Text>
+              <Pressable hitSlop={6} onPress={() => onRemove(item)} style={ds.bottomPanelClose}>
+                <Svg height={21} viewBox="0 0 21 21" width={21}>
+                  <Circle cx={10.5} cy={10.5} fill="#FFF" r={10} stroke="#A6ABB8" strokeWidth={1} />
+                  <Line stroke="#A6ABB8" strokeLinecap="round" strokeWidth={1.4} x1={7.5} x2={13.5} y1={7.5} y2={13.5} />
+                  <Line stroke="#A6ABB8" strokeLinecap="round" strokeWidth={1.4} x1={13.5} x2={7.5} y1={7.5} y2={13.5} />
+                </Svg>
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+      <Pressable style={[ds.bottomPanelDoneBtn, { backgroundColor: color }]}>
+        <Text style={ds.bottomPanelDoneText}>완료</Text>
+      </Pressable>
+    </LinearGradient>
+  );
+}
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <Svg height={24} viewBox="0 0 24 24" width={24}>
+      <Path
+        d="M12 4.5l2.49 5.04 5.56.81-4.02 3.92.95 5.54L12 17.2l-4.98 2.61.95-5.54L3.95 10.35l5.56-.81L12 4.5Z"
+        fill={filled ? "#FFC54A" : "none"}
+        stroke={filled ? "#FFC54A" : "#A6ABB8"}
+        strokeLinejoin="round"
+        strokeWidth={1.6}
+      />
+    </Svg>
+  );
+}
+
 function CheckCircle({ checked, color }: { checked: boolean; color: string }) {
   return (
     <View style={[ds.checkCircle, checked ? { backgroundColor: color, borderColor: color } : {}]}>
@@ -58,18 +120,6 @@ function CheckCircle({ checked, color }: { checked: boolean; color: string }) {
 }
 
 /* ── data ── */
-
-type UpcomingDay = { day: string; date: number; label: string; dateColor: string };
-
-const UPCOMING: UpcomingDay[] = [
-  { day: "MON", date: 16, label: "내용노출", dateColor: "#222" },
-  { day: "SAT", date: 21, label: "내용노출", dateColor: "#50A5F5" },
-  { day: "THU", date: 26, label: "내용노출", dateColor: "#222" },
-  { day: "SUN", date: 5, label: "내용노출", dateColor: "#FE655D" },
-  { day: "WED", date: 9, label: "내용노출", dateColor: "#222" },
-  { day: "FRI", date: 18, label: "내용노출", dateColor: "#222" },
-  { day: "SAT", date: 19, label: "내용노출", dateColor: "#50A5F5" },
-];
 
 const WEIGHT_DATA = [
   { value: 5.1, date: "1/2" },
@@ -99,17 +149,96 @@ const DDAY_LIST: DDay[] = [
 
 type CheckItem = { id: string; text: string; checked: boolean };
 
+const RECORD_CATEGORIES = [
+  "전체",
+  "나만의 운동",
+  "유산소",
+  "목",
+  "승모근",
+  "어깨",
+  "가슴",
+  "등",
+  "삼두",
+  "이두",
+  "전완",
+  "복부",
+  "허리",
+  "엉덩이",
+  "하체",
+  "종아리",
+  "전신",
+  "스트레칭",
+] as const;
+
+const RECORD_LIST_ITEMS = [
+  "나만의 운동",
+  "유산소",
+  "목",
+  "승모근",
+  "어깨",
+  "가슴",
+  "등",
+  "삼두",
+  "이두",
+  "전완",
+  "복부",
+  "허리",
+  "엉덩이",
+  "하체",
+  "종아리",
+  "전신",
+  "스트레칭",
+] as const;
+
+const EXERCISES_BY_CATEGORY: Record<string, string[]> = {
+  "유산소": ["러닝머신", "다른운동1", "다른운동2", "다른운동3", "다른운동4", "다른운동5"],
+};
+
+const DEFAULT_EXERCISES = ["다른운동1", "다른운동2", "다른운동3", "다른운동4", "다른운동5"];
+
 /* ── component ── */
 
-export function CalendarDetailScreen({ title, subtitle, color, icon, onClose }: CalendarDetailProps) {
+export function CalendarDetailScreen({ title, subtitle, color, icon, onClose, onRecordViewChange }: CalendarDetailProps) {
   const { width: screenWidth } = useWindowDimensions();
   const chartWidth = screenWidth - 70; // contentInner(25*2) + graphCard padding(10*2)
   const lightColor = hexToRgba(color, 0.15);
   const [innerTab, setInnerTab] = useState<"home" | "calendar" | "memo">("home");
+  const [view, setView] = useState<"detail" | "record" | "recordList">("detail");
+  const [recordListCategory, setRecordListCategory] = useState<"전체" | "나만의 운동" | "유산소" | "목" | "승모근" | "어깨" | "가슴" | "등" | "삼두" | "이두" | "전완" | "복부" | "허리" | "엉덩이" | "하체" | "종아리" | "전신" | "스트레칭">("전체");
+  const [recordListSort, setRecordListSort] = useState<"최근" | "빈도" | "이름">("최근");
+  const [recordListFilter, setRecordListFilter] = useState<"전체" | "즐겨찾기">("전체");
+  const [selectedExercise, setSelectedExercise] = useState<string | null>(null);
+  const [selectedExercises, setSelectedExercises] = useState<{ id: string; name: string }[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+
+  const toggleExercise = (item: { id: string; name: string }) => {
+    setSelectedExercises((prev) =>
+      prev.some((e) => e.id === item.id) ? prev.filter((e) => e.id !== item.id) : [...prev, item],
+    );
+  };
+
+  const toggleFavorite = (id: string) => {
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
   const [checkItems, setCheckItems] = useState<CheckItem[]>([
     { id: "1", text: "체크리스트 체크 시 색상이 표시됩니다.", checked: true },
     { id: "2", text: "체크리스트 내용이 노출됩니다.", checked: false },
   ]);
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, "0")}.${String(today.getDate()).padStart(2, "0")}`;
+
+  useEffect(() => {
+    onRecordViewChange?.(view !== "detail");
+  }, [view, onRecordViewChange]);
 
   const toggleCheck = (id: string) => {
     setCheckItems((prev) => prev.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item)));
@@ -137,13 +266,271 @@ export function CalendarDetailScreen({ title, subtitle, color, icon, onClose }: 
   }));
 
 
+  if (view === "record") {
+    return (
+      <View style={ds.recRoot}>
+        <View style={ds.recHeader}>
+          <Pressable onPress={() => setView("detail")} style={ds.recBackBtn}>
+            <Svg height={24} viewBox="0 0 24 24" width={24}>
+              <Path
+                d="M15 6l-6 6 6 6"
+                fill="none"
+                stroke="#222"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+              />
+            </Svg>
+          </Pressable>
+          <Text style={ds.recDate}>{todayStr}</Text>
+        </View>
+        <View style={ds.recDivider} />
+        <View style={ds.recEmpty}>
+          <Text style={ds.recEmptyText}>아직 운동기록이 없어요.</Text>
+          <Text style={ds.recEmptyText}>아래 기록하기 버튼을 눌러 운동을 기록해주세요.</Text>
+        </View>
+        <Pressable onPress={() => setView("recordList")} style={[ds.recSubmitBtn, { backgroundColor: color }]}>
+          <Text style={ds.recSubmitText}>기록하기</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (view === "recordList") {
+    const isAllMode = recordListCategory === "전체";
+    const exercises = EXERCISES_BY_CATEGORY[recordListCategory] ?? DEFAULT_EXERCISES;
+    const handleBack = () => {
+      if (selectedExercise !== null) {
+        setSelectedExercise(null);
+      } else if (recordListCategory !== "전체") {
+        setRecordListCategory("전체");
+      } else {
+        setView("record");
+      }
+    };
+    const variants = selectedExercise
+      ? Array.from({ length: 4 }, (_, i) => ({ id: `${selectedExercise}::${i + 1}`, name: selectedExercise }))
+      : [];
+
+    return (
+      <View style={ds.listRoot}>
+        {isAllMode && (
+          <View style={ds.listHeader}>
+            <Text style={ds.recDate}>{todayStr}</Text>
+          </View>
+        )}
+
+        <View style={[ds.listSearchRow, !isAllMode && ds.listSearchRowTop]}>
+          <Pressable onPress={handleBack} style={ds.listIconBtn}>
+            <Svg height={24} viewBox="0 0 24 24" width={24}>
+              <Path
+                d="M15 6l-6 6 6 6"
+                fill="none"
+                stroke="#222"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+              />
+            </Svg>
+          </Pressable>
+          <View style={ds.listSearchBox}>
+            <TextInput
+              placeholder="운동 검색 (ex. 스쿼트)"
+              placeholderTextColor="#A6ABB8"
+              style={ds.listSearchInput}
+            />
+            <Svg height={20} viewBox="0 0 20 20" width={20}>
+              <Circle cx={9} cy={9} fill="none" stroke="#A6ABB8" strokeWidth={1.6} r={6} />
+              <Line stroke="#A6ABB8" strokeLinecap="round" strokeWidth={1.6} x1={13.5} x2={17} y1={13.5} y2={17} />
+            </Svg>
+          </View>
+          <Pressable style={ds.listIconBtn}>
+            <PlusIcon color="#222" />
+          </Pressable>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={ds.listCategoryScroll}
+          contentContainerStyle={ds.listCategoryContent}
+        >
+          {RECORD_CATEGORIES.map((cat) => {
+            const active = recordListCategory === cat;
+            return (
+              <Pressable
+                key={cat}
+                onPress={() => {
+                  setRecordListCategory(cat);
+                  setSelectedExercise(null);
+                }}
+                style={[ds.listCategoryItem, active && { borderBottomColor: color, borderBottomWidth: 2 }]}
+              >
+                <Text style={[ds.listCategoryText, active && ds.listCategoryTextActive]}>{cat}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <View style={ds.listSortRow}>
+          <View style={ds.listSortGroup}>
+            {(["최근", "빈도", "이름"] as const).map((s) => (
+              <Pressable key={s} onPress={() => setRecordListSort(s)}>
+                <Text style={recordListSort === s ? ds.listSortActive : ds.listSortInactive}>{s}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={ds.listSortGroup}>
+            {(["전체", "즐겨찾기"] as const).map((f) => (
+              <Pressable key={f} onPress={() => setRecordListFilter(f)}>
+                <Text style={recordListFilter === f ? ds.listSortActive : ds.listSortInactive}>{f}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {isAllMode ? (
+          <ScrollView
+            contentContainerStyle={ds.listItemsContent}
+            showsVerticalScrollIndicator={false}
+            style={ds.listItems}
+          >
+            {RECORD_LIST_ITEMS.map((item) => (
+              <Pressable key={item} onPress={() => setRecordListCategory(item as typeof recordListCategory)} style={ds.listItemRow}>
+                <View style={ds.listItemLeft}>
+                  <View style={ds.listItemThumb} />
+                  <Text style={ds.listItemName}>{item}</Text>
+                </View>
+                <View style={ds.listItemRight}>
+                  <Text style={ds.listItemCount}>04</Text>
+                  <Svg height={24} viewBox="0 0 24 24" width={24}>
+                    <Path
+                      d="M9 6l6 6-6 6"
+                      fill="none"
+                      stroke="#A6ABB8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                    />
+                  </Svg>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : selectedExercise === null ? (
+          <>
+            <View style={ds.catTitleRow}>
+              <Text style={ds.catTitle}>{recordListCategory}</Text>
+            </View>
+            <ScrollView
+              contentContainerStyle={ds.catItemsContent}
+              showsVerticalScrollIndicator={false}
+              style={ds.catItems}
+            >
+              {exercises.map((ex) => {
+                const isFav = favoriteIds.has(ex);
+                return (
+                  <Pressable key={ex} onPress={() => setSelectedExercise(ex)} style={ds.catItemRow}>
+                    <Text style={ds.catItemName}>{ex}</Text>
+                    <View style={ds.catItemRight}>
+                      <Pressable hitSlop={8} onPress={() => toggleFavorite(ex)} style={ds.catItemIconBtn}>
+                        <StarIcon filled={isFav} />
+                      </Pressable>
+                      <Text style={ds.catItemCount}>04</Text>
+                      <Svg height={24} viewBox="0 0 24 24" width={24}>
+                        <Path
+                          d="M9 6l6 6-6 6"
+                          fill="none"
+                          stroke="#A6ABB8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                        />
+                      </Svg>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <BottomSelectionPanel
+              color={color}
+              items={selectedExercises}
+              onRemove={toggleExercise}
+            />
+          </>
+        ) : (
+          <>
+            <View style={ds.catTitleRow}>
+              <View style={ds.detailBreadcrumb}>
+                <Text style={ds.catTitle}>{recordListCategory}</Text>
+                <Svg height={20} viewBox="0 0 20 20" width={20}>
+                  <Path
+                    d="M7 5l5 5-5 5"
+                    fill="none"
+                    stroke="#222"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                  />
+                </Svg>
+                <Text style={ds.catTitle}>{selectedExercise}</Text>
+              </View>
+            </View>
+            <ScrollView
+              contentContainerStyle={ds.catItemsContent}
+              showsVerticalScrollIndicator={false}
+              style={ds.catItems}
+            >
+              <Pressable onPress={() => setSelectedExercise(null)} style={ds.detailBackRow}>
+                <Svg height={24} viewBox="0 0 24 24" width={24}>
+                  <Path
+                    d="M15 6l-6 6 6 6"
+                    fill="none"
+                    stroke="#222"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                  />
+                </Svg>
+                <Text style={ds.catItemName}>뒤로</Text>
+              </Pressable>
+              {variants.map((v) => {
+                const isFav = favoriteIds.has(v.id);
+                const isSelected = selectedExercises.some((e) => e.id === v.id);
+                return (
+                  <Pressable
+                    key={v.id}
+                    onPress={() => toggleExercise(v)}
+                    style={[ds.catItemRow, isSelected && { borderColor: color, borderWidth: 1.5 }]}
+                  >
+                    <Text style={ds.catItemName}>{v.name}</Text>
+                    <Pressable hitSlop={8} onPress={() => toggleFavorite(v.id)} style={ds.catItemIconBtn}>
+                      <StarIcon filled={isFav} />
+                    </Pressable>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <BottomSelectionPanel
+              color={color}
+              items={selectedExercises}
+              onRemove={toggleExercise}
+            />
+          </>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={ds.root}>
       <ScrollView bounces={false} contentContainerStyle={ds.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <View style={[ds.hero, { backgroundColor: color }]}>
           <View style={ds.heroBody}>
-            <Pressable onPress={onClose} style={ds.heroIconWrap}>
+            <Pressable disabled={!onClose} onPress={onClose} style={ds.heroIconWrap}>
               <Image resizeMode="contain" source={calendarCardIconAssets[icon]} style={ds.heroIcon} />
             </Pressable>
             <View style={ds.heroBottom}>
@@ -224,26 +611,9 @@ export function CalendarDetailScreen({ title, subtitle, color, icon, onClose }: 
             </View>
 
             {/* Record button */}
-            <Pressable style={[ds.recordBtn, { borderColor: color }]}>
+            <Pressable onPress={() => setView("record")} style={[ds.recordBtn, { borderColor: color }]}>
               <Text style={ds.recordBtnText}>오늘 운동 기록하기</Text>
             </Pressable>
-
-            {/* Upcoming schedule */}
-            <View style={ds.section}>
-              <Text style={ds.sectionTitle}>다가오는 일정</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={ds.upcomingScroll} contentContainerStyle={ds.upcomingRow}>
-                {UPCOMING.map((d, i) => (
-                  <View key={i} style={ds.upcomingCard}>
-                    <View style={ds.upcomingDate}>
-                      <Text style={ds.upcomingDay}>{d.day}</Text>
-                      <Text style={[ds.upcomingNum, { color: d.dateColor }]}>{d.date}</Text>
-                    </View>
-                    <View style={ds.upcomingDivider} />
-                    <Text numberOfLines={1} style={ds.upcomingLabel}>{d.label}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
 
             {/* Photo + D-Day */}
             <View style={ds.photoDdayRow}>
@@ -381,7 +751,7 @@ const ds = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 30,
+    paddingBottom: 130,
   },
   contentInner: {
     paddingHorizontal: 25,
@@ -586,55 +956,6 @@ const ds = StyleSheet.create({
     letterSpacing: -0.36,
   },
 
-  /* Upcoming */
-  upcomingScroll: {
-    overflow: "visible",
-  },
-  upcomingRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  upcomingCard: {
-    alignItems: "center",
-    backgroundColor: "#FFF",
-    borderRadius: 5,
-    elevation: 3,
-    gap: 8,
-    height: 90,
-    justifyContent: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    shadowColor: "#5E616C",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    width: 100,
-  },
-  upcomingDate: {
-    alignItems: "center",
-    gap: 4,
-  },
-  upcomingDay: {
-    color: "#A6ABB8",
-    fontSize: 10,
-    fontWeight: "500",
-  },
-  upcomingNum: {
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  upcomingDivider: {
-    backgroundColor: "rgba(0,0,0,0.06)",
-    height: 1,
-    width: "100%",
-  },
-  upcomingLabel: {
-    color: "rgba(0,0,0,0.5)",
-    fontSize: 12,
-    fontWeight: "500",
-    textAlign: "center",
-  },
-
   /* Photo + D-Day */
   photoDdayRow: {
     flexDirection: "row",
@@ -643,7 +964,7 @@ const ds = StyleSheet.create({
   },
   photoPlaceholder: {
     alignItems: "center",
-    backgroundColor: "#E8E9ED",
+    backgroundColor: "#C5C8CF",
     borderRadius: 10,
     flex: 1,
     height: 170,
@@ -768,5 +1089,370 @@ const ds = StyleSheet.create({
     borderWidth: 1,
     height: 60,
     justifyContent: "center",
+  },
+
+  /* Record view */
+  recRoot: {
+    alignItems: "center",
+    backgroundColor: "#F6F7FB",
+    flex: 1,
+    paddingBottom: 50,
+    paddingHorizontal: 10,
+    paddingTop: 50,
+  },
+  recHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    height: 60,
+    justifyContent: "center",
+    paddingHorizontal: 25,
+    width: "100%",
+  },
+  recBackBtn: {
+    alignItems: "center",
+    height: 40,
+    justifyContent: "center",
+    left: 15,
+    position: "absolute",
+    width: 40,
+  },
+  recDate: {
+    color: "#222",
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: -0.44,
+  },
+  recDivider: {
+    backgroundColor: "rgba(0,0,0,0.08)",
+    height: 1,
+    marginTop: 50,
+    maxWidth: 380,
+    width: "100%",
+  },
+  recEmpty: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  recEmptyText: {
+    color: "#A6ABB8",
+    fontSize: 16,
+    fontWeight: "500",
+    letterSpacing: -0.32,
+    textAlign: "center",
+  },
+  recSubmitBtn: {
+    alignItems: "center",
+    borderRadius: 10,
+    height: 60,
+    justifyContent: "center",
+    maxWidth: 380,
+    width: "100%",
+  },
+  recSubmitText: {
+    color: "#F6F7FB",
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: -0.32,
+  },
+
+  /* Record list view */
+  listRoot: {
+    backgroundColor: "#F6F7FB",
+    flex: 1,
+    paddingTop: 50,
+  },
+  listHeader: {
+    alignItems: "center",
+    height: 60,
+    justifyContent: "center",
+  },
+  listSearchRow: {
+    alignItems: "center",
+    alignSelf: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 30,
+    width: 380,
+    maxWidth: "100%",
+  },
+  listIconBtn: {
+    alignItems: "center",
+    height: 24,
+    justifyContent: "center",
+    width: 24,
+  },
+  listSearchBox: {
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 10,
+    flex: 1,
+    flexDirection: "row",
+    height: 50,
+    marginHorizontal: 14,
+    paddingHorizontal: 20,
+  },
+  listSearchInput: {
+    color: "#222",
+    flex: 1,
+    fontSize: 16,
+    letterSpacing: -0.32,
+    padding: 0,
+  },
+  listCategoryScroll: {
+    borderBottomColor: "#E8EBF5",
+    borderBottomWidth: 1,
+    flexGrow: 0,
+    marginTop: 30,
+  },
+  listCategoryContent: {
+    alignItems: "center",
+    gap: 20,
+    height: 40,
+    paddingHorizontal: 25,
+  },
+  listCategoryItem: {
+    alignItems: "center",
+    borderBottomColor: "transparent",
+    borderBottomWidth: 2,
+    height: 40,
+    justifyContent: "center",
+  },
+  listCategoryText: {
+    color: "#A6ABB8",
+    fontSize: 18,
+    fontWeight: "400",
+    letterSpacing: -0.36,
+  },
+  listCategoryTextActive: {
+    color: "#222",
+    fontWeight: "600",
+  },
+  listSortRow: {
+    alignSelf: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 30,
+    width: 380,
+    maxWidth: "100%",
+    paddingHorizontal: 25,
+  },
+  listSortGroup: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  listSortActive: {
+    color: "#222",
+    fontSize: 14,
+    fontWeight: "600",
+    letterSpacing: -0.28,
+  },
+  listSortInactive: {
+    color: "#A6ABB8",
+    fontSize: 14,
+    fontWeight: "400",
+    letterSpacing: -0.28,
+  },
+  listItems: {
+    flex: 1,
+    marginTop: 20,
+  },
+  listItemsContent: {
+    alignItems: "center",
+    gap: 10,
+    paddingBottom: 130,
+    paddingHorizontal: 25,
+  },
+  listItemRow: {
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 10,
+    flexDirection: "row",
+    height: 80,
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: 380,
+    maxWidth: "100%",
+  },
+  listItemLeft: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 15,
+  },
+  listItemThumb: {
+    backgroundColor: "#C5C8CF",
+    borderRadius: 5,
+    height: 55,
+    width: 55,
+  },
+  listItemName: {
+    color: "#222",
+    fontSize: 16,
+    fontWeight: "500",
+    letterSpacing: -0.32,
+  },
+  listItemRight: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  listItemCount: {
+    color: "#222",
+    fontSize: 16,
+    fontWeight: "500",
+    letterSpacing: -0.32,
+  },
+
+  /* Category-specific list view */
+  listSearchRowTop: {
+    marginTop: 0,
+    paddingTop: 0,
+  },
+  catTitleRow: {
+    alignSelf: "center",
+    marginTop: 30,
+    paddingHorizontal: 25,
+    width: 380,
+    maxWidth: "100%",
+  },
+  catTitle: {
+    color: "#222",
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: -0.36,
+  },
+  catItems: {
+    flex: 1,
+    marginTop: 20,
+  },
+  catItemsContent: {
+    alignItems: "center",
+    gap: 10,
+    paddingBottom: 20,
+    paddingHorizontal: 25,
+  },
+  catItemRow: {
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 10,
+    flexDirection: "row",
+    height: 60,
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: 380,
+    maxWidth: "100%",
+  },
+  catItemName: {
+    color: "#222",
+    fontSize: 16,
+    fontWeight: "500",
+    letterSpacing: -0.32,
+  },
+  catItemRight: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  catItemIconBtn: {
+    alignItems: "center",
+    height: 30,
+    justifyContent: "center",
+    width: 30,
+  },
+  catItemCount: {
+    color: "#222",
+    fontSize: 16,
+    fontWeight: "500",
+    letterSpacing: -0.32,
+  },
+
+  /* Detail (level 3) view */
+  detailBreadcrumb: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+  },
+  detailBackRow: {
+    alignItems: "center",
+    backgroundColor: "rgba(166,171,184,0.1)",
+    borderRadius: 10,
+    flexDirection: "row",
+    gap: 10,
+    height: 60,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: 380,
+    maxWidth: "100%",
+  },
+
+  /* Bottom selection panel */
+  bottomPanel: {
+    gap: 19,
+    paddingHorizontal: 2,
+    paddingVertical: 4,
+  },
+  bottomPanelItems: {
+    alignItems: "flex-start",
+    gap: 15,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  bottomPanelItem: {
+    alignItems: "center",
+    gap: 10,
+    width: 80,
+  },
+  bottomPanelThumb: {
+    backgroundColor: "#C5C8CF",
+    borderRadius: 5,
+    height: 80,
+    width: 80,
+  },
+  bottomPanelItemName: {
+    color: "#222",
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: -0.32,
+    textAlign: "center",
+  },
+  bottomPanelClose: {
+    position: "absolute",
+    right: -5,
+    top: -5,
+  },
+  bottomPanelEmpty: {
+    alignItems: "center",
+    borderColor: "#A6ABB8",
+    borderRadius: 10,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    height: 110,
+    justifyContent: "center",
+    width: "100%",
+  },
+  bottomPanelEmptyText: {
+    color: "#A6ABB8",
+    fontSize: 14,
+    fontWeight: "500",
+    letterSpacing: -0.28,
+  },
+  bottomPanelDoneBtn: {
+    alignItems: "center",
+    alignSelf: "center",
+    borderRadius: 10,
+    height: 60,
+    justifyContent: "center",
+    width: 380,
+    maxWidth: "100%",
+  },
+  bottomPanelDoneText: {
+    color: "#F6F7FB",
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: -0.32,
   },
 });

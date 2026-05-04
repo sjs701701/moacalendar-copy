@@ -308,6 +308,12 @@ export function AuthScreen() {
     Alert.alert(label, "약관 내용이 노출될 예정입니다.");
   };
 
+  const focusVerificationInput = (index: number) => {
+    setTimeout(() => {
+      verificationInputRefs.current[index]?.focus();
+    }, 50);
+  };
+
   const showWarning = (message: string) => {
     dismissSignupInputs();
     Alert.alert("알림", message);
@@ -358,6 +364,10 @@ export function AuthScreen() {
       next[index] = numericValue;
       return next;
     });
+
+    if (numericValue && index < verificationCode.length - 1) {
+      focusVerificationInput(index + 1);
+    }
   };
 
   const clearVerificationDigit = (
@@ -368,17 +378,21 @@ export function AuthScreen() {
       return;
     }
 
-    setVerificationCode((current) => {
-      if (current[index]) {
-        return current;
-      }
+    if (verificationCode[index]) {
+      return;
+    }
 
+    setVerificationCode((current) => {
       const next = [...current];
       if (index > 0) {
         next[index - 1] = "";
       }
       return next;
     });
+
+    if (index > 0) {
+      focusVerificationInput(index - 1);
+    }
   };
 
   if (stage === "landing") {
@@ -503,9 +517,13 @@ export function AuthScreen() {
                   <Pressable
                     disabled={phoneNumber.length !== 11 || timerRunning}
                     onPress={() => {
-                      dismissSignupInputs();
+                      phoneInputRef.current?.blur();
+                      setPhoneFocused(false);
+                      setFocusedVerificationIndex(0);
+                      setVerificationCode(["", "", "", "", "", ""]);
                       setVerificationRequested(true);
                       startTimer();
+                      focusVerificationInput(0);
                     }}
                     style={[
                       signupStyles.outlineButton,

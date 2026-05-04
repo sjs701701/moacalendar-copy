@@ -16,15 +16,10 @@ type CalendarCard = {
 };
 
 const cards: CalendarCard[] = [
-  { id: "basic", title: "기본 캘린더", subtitle: "기본 캘린더", color: "#FFC54A", icon: "star" },
-  { id: "money", title: "지갑 지키미", subtitle: "소비 캘린더", color: "#50A5F5", icon: "wallet" },
-  { id: "pet", title: "제피", subtitle: "반려동물 캘린더", color: "#7550F5", icon: "pet" },
-  { id: "wedding", title: "우빈♡민아", subtitle: "결혼 캘린더", color: "#F059A7", icon: "wedding" },
   { id: "workout", title: "헬스", subtitle: "운동 캘린더", color: "#FE655D", icon: "health" },
-  { id: "health", title: "건강", subtitle: "건강 캘린더", color: "#1FD2C3", icon: "medical" },
-  { id: "study", title: "목표는 서울대!", subtitle: "스터디 캘린더", color: "#88C255", icon: "study" },
-  { id: "baby", title: "이로 육아일기", subtitle: "육아 캘린더", color: "#FF9030", icon: "baby" },
 ];
+
+const homeCalendarCard = cards[0];
 
 const calendarCardIconAssetPaths: Record<CalendarCard["icon"], string> = {
   star: "assets/home/calendar-icons/basic-calendar-icon.png",
@@ -338,6 +333,7 @@ export function MainHomeScreen() {
   const [selectedAddMenuItem, setSelectedAddMenuItem] = useState<AddMenuItem | null>(null);
   const [boardWriteCategory, setBoardWriteCategory] = useState<AddMenuItem | null>(null);
   const [openCalendarCard, setOpenCalendarCard] = useState<CalendarCard | null>(null);
+  const [isHomeRecordView, setIsHomeRecordView] = useState(false);
   const addMenuAnimation = useRef(new Animated.Value(0)).current;
   const tabBarAnimation = useRef(new Animated.Value(0)).current;
   const lastScrollOffset = useRef(0);
@@ -380,6 +376,11 @@ export function MainHomeScreen() {
 
     updateTabBarVisibility(tabBarHiddenBeforeMenuOpen.current);
   }, [isAddMenuOpen]);
+
+  useEffect(() => {
+    if (activeTab !== "home") return;
+    updateTabBarVisibility(isHomeRecordView);
+  }, [activeTab, isHomeRecordView]);
 
   const closeAddMenu = () => {
     setIsAddMenuOpen(false);
@@ -467,27 +468,18 @@ export function MainHomeScreen() {
 
   return (
     <View style={styles.screenRoot}>
-    <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
+    <SafeAreaView edges={["left", "right"]} style={styles.safeArea}>
       <View style={styles.container}>
         {activeTab === "home" ? (
-          <>
-        <Animated.ScrollView
-          bounces={false}
-          contentContainerStyle={styles.scrollContent}
-          onScroll={(event) => handleScroll(event.nativeEvent.contentOffset.y)}
-          scrollEventThrottle={16}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.grid}>
-            {cards.map((card) => (
-              <Pressable key={card.id} onPress={() => setOpenCalendarCard(card)}>
-                <CalendarCardView card={card} width={cardWidth} />
-              </Pressable>
-            ))}
+          <View style={styles.homeCalendarDetail}>
+            <CalendarDetailScreen
+              color={homeCalendarCard.color}
+              icon={homeCalendarCard.icon}
+              onRecordViewChange={setIsHomeRecordView}
+              subtitle={homeCalendarCard.subtitle}
+              title={homeCalendarCard.title}
+            />
           </View>
-        </Animated.ScrollView>
-
-          </>
         ) : activeTab === "calendar" ? (
           <View style={{ flex: 1, marginHorizontal: -25 }}>
             <CalendarScreen />
@@ -542,7 +534,7 @@ export function MainHomeScreen() {
           </>
         ) : null}
 
-        {(activeTab === "home" || activeTab === "share") && !isAddMenuMounted ? (
+        {(activeTab === "home" || activeTab === "share") && !isAddMenuMounted && !(activeTab === "home" && isHomeRecordView) ? (
           <Pressable
             onPress={toggleAddMenu}
             style={styles.fab}
@@ -675,6 +667,11 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 130,
+  },
+  homeCalendarDetail: {
+    flex: 1,
+    marginHorizontal: -25,
+    marginTop: -18,
   },
   grid: {
     columnGap: 18,

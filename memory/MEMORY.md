@@ -1,0 +1,1 @@
+- [User handles image assets manually](feedback_assets.md) — Use grey placeholders for raster images from Figma; never download or embed.
